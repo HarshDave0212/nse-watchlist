@@ -1,0 +1,36 @@
+name: daily-watchlist
+on:
+  schedule: [{cron: "30 11 * * 1-5"}]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run even on a holiday or weekend"
+        type: boolean
+        default: false
+permissions: {contents: write, pages: write, id-token: write}
+concurrency: {group: pages, cancel-in-progress: true}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: {name: github-pages, url: "${{ steps.dep.outputs.page_url }}"}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements.txt
+      - run: python main.py --notify ${{ github.event.inputs.force == 'true' && '--force' || '' }}
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      - run: |
+          git config user.name bot
+          git config user.email bot@users.noreply.github.com
+          git add data || true
+          git commit -m "history $(date -u +%F)" || true
+          git push || true
+      - if: hashFiles('site/index.html') != ''
+        uses: actions/upload-pages-artifact@v3
+        with: {path: site}
+      - if: hashFiles('site/index.html') != ''
+        id: dep
+        uses: actions/deploy-pages@v4
